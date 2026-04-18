@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Job Agent</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+
+  <div class="bg-orb orb-1"></div>
+  <div class="bg-orb orb-2"></div>
+  <div class="bg-orb orb-3"></div>
+  <div class="noise"></div>
+
+  <!-- ── HEADER ── -->
+  <header class="site-header">
+    <div class="logo" onclick="window.scrollTo({top:0,behavior:'smooth'})" style="cursor:pointer" title="Go to top">
+      <span class="logo-icon">⬡</span>
+      <span class="logo-text">JobAgent <span class="logo-ai">AI</span></span>
+    </div>
+    <nav class="header-nav">
+      <div class="ai-logo-btn" id="aiLogoBtn" onclick="animateLogo()" title="Groq AI">
+        <div class="ai-logo-inner">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <span class="ai-logo-text">Spin-it✌️</span>
+      </div>
+    </nav>
+  </header>
+
+  <!-- ── HERO ── -->
+  <section class="hero">
+    <p class="hero-eyebrow">Autonomous Job Search</p>
+    <h1 class="hero-title">
+      Your AI-Powered<br/>
+      <em>Career Agent</em>
+    </h1>
+    <p class="hero-sub">Upload your resume. Get matched jobs ranked by fit, with ready-to-send application emails — in under 60 seconds.</p>
+    <div class="steps-row">
+      <div class="step-pill">01 Upload Resume</div>
+      <div class="step-arrow">→</div>
+      <div class="step-pill">02 AI Matches Jobs</div>
+      <div class="step-arrow">→</div>
+      <div class="step-pill">03 Get Application Emails</div>
+    </div>
+  </section>
+
+  <!-- ── FORM ── -->
+  <main class="main-container">
+    <div class="form-panel" id="formPanel">
+      <div class="form-panel-header">
+        <h2>Configure Your Search</h2>
+        <p>All fields are required.</p>
+      </div>
+
+      <form id="jobForm" enctype="multipart/form-data">
+
+        <!-- Resume Upload -->
+        <div class="field-group">
+          <label class="field-label">Resume <span class="req">*</span></label>
+          <div class="upload-zone" id="uploadZone">
+            <input type="file" id="resumeFile" name="resume" accept=".pdf,.docx" hidden />
+            <div class="upload-inner" id="uploadInner">
+              <div class="upload-icon">↑</div>
+              <p class="upload-title">Drop your resume here</p>
+              <p class="upload-sub">PDF or DOCX · Max 10MB</p>
+            </div>
+            <div class="upload-selected" id="uploadSelected" style="display:none">
+              <span class="file-icon">📄</span>
+              <span id="fileName"></span>
+              <button type="button" class="remove-file" id="removeFile">✕</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Job Title + Location -->
+        <div class="fields-row">
+          <div class="field-group" style="position:relative">
+            <label class="field-label" for="jobTitle">Job Title <span class="req">*</span></label>
+            <input type="text" id="jobTitle" name="job_title" class="field-input" placeholder="e.g. Python Developer" autocomplete="off" />
+            <div class="suggest-box" id="jobSuggest"></div>
+          </div>
+          <div class="field-group" style="position:relative">
+            <label class="field-label" for="location">Location <span class="req">*</span></label>
+            <input type="text" id="location" name="location" class="field-input" placeholder="e.g. Bangalore" autocomplete="off" />
+            <div class="suggest-box" id="locSuggest"></div>
+          </div>
+        </div>
+
+        <!-- Num Jobs only (tone removed) -->
+        <div class="field-group">
+          <label class="field-label">Jobs to Search <span class="field-value" id="numJobsDisplay">10</span></label>
+          <input type="range" id="numJobs" name="num_jobs" min="5" max="20" value="10" class="range-input" />
+          <div class="range-labels"><span>5</span><span>20</span></div>
+        </div>
+
+        <button type="submit" class="submit-btn" id="submitBtn">
+          <span class="btn-text">Run Agent</span>
+          <span class="btn-icon">→</span>
+        </button>
+
+      </form>
+    </div>
+
+    <!-- ── PROGRESS ── -->
+    <div class="progress-panel" id="progressPanel" style="display:none">
+      <div class="progress-header">
+        <div class="progress-spinner"></div>
+        <h3>Agent Running</h3>
+      </div>
+      <div class="progress-steps">
+        <div class="prog-step" id="ps1">
+          <div class="ps-dot"></div>
+          <div class="ps-content">
+            <span class="ps-label">Resume Parser</span>
+            <span class="ps-msg" id="pm1">Waiting...</span>
+          </div>
+        </div>
+        <div class="prog-step" id="ps2">
+          <div class="ps-dot"></div>
+          <div class="ps-content">
+            <span class="ps-label">Job Search</span>
+            <span class="ps-msg" id="pm2">Waiting...</span>
+          </div>
+        </div>
+        <div class="prog-step" id="ps3">
+          <div class="ps-dot"></div>
+          <div class="ps-content">
+            <span class="ps-label">AI Matching</span>
+            <span class="ps-msg" id="pm3">Waiting...</span>
+          </div>
+        </div>
+        <div class="prog-step" id="ps4">
+          <div class="ps-dot"></div>
+          <div class="ps-content">
+            <span class="ps-label">Application Emails</span>
+            <span class="ps-msg" id="pm4">Waiting...</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── RESULTS ── -->
+    <div class="results-panel" id="resultsPanel" style="display:none">
+
+      <div class="summary-bar" id="summaryBar"></div>
+
+      <!-- Resume Analysis -->
+      <div class="result-section">
+        <h3 class="section-title">Resume Analysis</h3>
+        <div class="resume-card" id="resumeCard"></div>
+      </div>
+
+      <!-- Jobs + Emails -->
+      <div class="result-section">
+        <div class="section-title-row">
+          <h3 class="section-title" style="margin:0">Matched Jobs</h3>
+          <button class="back-to-emails-btn" id="backToEmailsBtn" style="display:none" onclick="switchToEmails()">✉ View Emails</button>
+        </div>
+        <div class="tabs-bar">
+          <button class="tab-btn active" data-tab="all">All Jobs</button>
+          <button class="tab-btn" data-tab="letters">
+            <span class="tab-email-icon">✉</span> Application Emails
+          </button>
+        </div>
+        <div class="tab-content" id="tabAll"></div>
+
+        <!-- Email tab — dedicated layout -->
+        <div class="tab-content hidden" id="tabLetters">
+          <!-- populated by JS -->
+        </div>
+      </div>
+
+      <button class="reset-btn" id="resetBtn">← Start New Search</button>
+    </div>
+
+  </main>
+
+  <footer class="site-footer">
+  <span>Built with Flask · Groq LLaMA 3 · RapidAPI · scikit-learn</span>
+</footer>
+
+
+  <!-- ── TOP 5 APPLY MODAL ── -->
+  <div class="modal-overlay" id="top5Modal" onclick="if(event.target===this)closeTop5Modal()">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div class="modal-title-row">
+          <span class="modal-icon">⬡</span>
+          <h3>Your Top 5 Matches</h3>
+        </div>
+        <button class="modal-close" onclick="closeTop5Modal()">✕</button>
+      </div>
+      <p class="modal-sub">Click <strong>Apply Now</strong> on any job to open the official application page.</p>
+      <div class="modal-cards" id="top5Cards"></div>
+    </div>
+  </div>
+
+  <script src="/static/js/main.js"></script>
+</body>
+</html>
