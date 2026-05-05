@@ -2,7 +2,7 @@
 job_scraper.py
 --------------
 Fetches real jobs from JSearch API (via RapidAPI).
-Returns actual job listings with direct apply links.
+Supports: job type (job/internship), experience level, fresh listings only.
 """
 
 import os
@@ -11,77 +11,91 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-RAPIDAPI_KEY  = os.getenv("RAPIDAPI_KEY")
-JSEARCH_HOST  = "jsearch.p.rapidapi.com"
-JSEARCH_URL   = "https://jsearch.p.rapidapi.com/search"
+RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY")
+JSEARCH_HOST = "jsearch.p.rapidapi.com"
+JSEARCH_URL  = "https://jsearch.p.rapidapi.com/search"
+
+# Experience level → query modifier
+EXPERIENCE_QUERY = {
+    "fresher":  "fresher OR entry level OR 0 years experience",
+    "1yr":      "1 year experience",
+    "2-3yr":    "2 to 3 years experience",
+    "4+yr":     "4+ years experience senior",
+}
 
 
-def fetch_jobs_jsearch(job_title: str, location: str, num_jobs: int = 10) -> list:
-    """
-    Fetches real jobs from JSearch API.
+def fetch_jobs_jsearch(
+    job_title: str,
+    location: str,
+    num_jobs: int = 10,
+    job_type: str = "job",          # "job" or "internship"
+    experience: str = "fresher"     # "fresher" | "1yr" | "2-3yr" | "4+yr"
+) -> list:
 
-    Args:
-        job_title : e.g. "Python Developer"
-        location  : e.g. "Bangalore"
-        num_jobs  : how many jobs to return (max 10 per page)
-
-    Returns:
-        List of job dicts
-    """
     if not RAPIDAPI_KEY:
-        print("  ⚠ RAPIDAPI_KEY not found in .env — falling back to demo data.")
-        return get_demo_jobs(job_title, location, num_jobs)
+        print("  ⚠ RAPIDAPI_KEY not found — using demo data.")
+        return get_demo_jobs(job_title, location, num_jobs, job_type)
 
     headers = {
         "X-RapidAPI-Key":  RAPIDAPI_KEY,
         "X-RapidAPI-Host": JSEARCH_HOST
     }
 
+    # Build smart query
+    base_query = job_title
+    if job_type == "internship":
+        base_query = f"{job_title} internship"
+    exp_modifier = EXPERIENCE_QUERY.get(experience, "")
+    full_query   = f"{base_query} {exp_modifier} in {location}".strip()
+
     params = {
-        "query":       f"{job_title} in {location}",
+        "query":       full_query,
         "page":        "1",
         "num_pages":   "1",
-        "date_posted": "month",       # jobs posted in last 30 days
-        "country":     "in",          # India
+        "date_posted": "week",   # ✅ week filter — fresh jobs only
+        "country":     "in",
         "language":    "en"
     }
 
-    try:
-        print(f"  Calling JSearch API: '{job_title}' in '{location}'...")
-        response = requests.get(
-            JSEARCH_URL,
-            headers=headers,
-            params=params,
-            timeout=15
-        )
+    # Add employment type filter for internships
+    if job_type == "internship":
+        params["employment_types"] = "INTERN"
 
-        if response.status_code == 200:
-            data = response.json()
-            raw_jobs = data.get("data", [])
+    try:
+        print(f"  JSearch: '{full_query}'  [date: week]")
+        resp = requests.get(JSEARCH_URL, headers=headers, params=params, timeout=15)
+
+        if resp.status_code == 200:
+            raw_jobs = resp.json().get("data", [])
 
             if not raw_jobs:
-                print("  No jobs returned by API — using demo data.")
-                return get_demo_jobs(job_title, location, num_jobs)
+                print("  No jobs returned — using demo data.")
+                return get_demo_jobs(job_title, location, num_jobs, job_type)
+
+            # Priority order: LinkedIn > Naukri > Internshala > Indeed > others
+            PRIORITY = ["linkedin", "naukri", "internshala", "indeed"]
+
+            def _priority(job):
+                src = (job.get("job_publisher") or "").lower()
+                for i, p in enumerate(PRIORITY):
+                    if p in src:
+                        return i
+                return len(PRIORITY)  # others last
+
+            raw_jobs_sorted = sorted(raw_jobs, key=_priority)
 
             jobs = []
-            for j in raw_jobs[:num_jobs]:
-                # Build direct apply URL — prefer direct link over JSearch redirect
-                apply_url = (
-                    j.get("job_apply_link") or
-                    j.get("job_google_link") or
-                    ""
-                )
-
-                # Salary info
-                salary = _format_salary(j)
-
+            for j in raw_jobs_sorted[:num_jobs]:
+                apply_url = j.get("job_apply_link") or j.get("job_google_link") or ""
+                source    = j.get("job_publisher", "JSearch")
                 jobs.append({
                     "title":       j.get("job_title", "N/A"),
                     "company":     j.get("employer_name", "N/A"),
                     "location":    _format_location(j),
-                    "salary":      salary,
+                    "salary":      _format_salary(j),
                     "url":         apply_url,
-                    "source":      j.get("job_publisher", "JSearch"),
+                    "source":      source,
+                    "source_icon": _source_icon(source),
                     "posted_at":   j.get("job_posted_at_datetime_utc", "")[:10],
                     "job_type":    j.get("job_employment_type", "Full-time"),
                     "is_remote":   j.get("job_is_remote", False),
@@ -89,24 +103,20 @@ def fetch_jobs_jsearch(job_title: str, location: str, num_jobs: int = 10) -> lis
                     "highlights":  _extract_highlights(j),
                 })
 
-            print(f"  ✓ {len(jobs)} real jobs fetched from JSearch.")
+            print(f"  ✓ {len(jobs)} jobs fetched. Sources: {[j['source'] for j in jobs[:3]]}")
             return jobs
 
-        elif response.status_code == 429:
-            print("  ⚠ Rate limit hit — using demo data.")
-            return get_demo_jobs(job_title, location, num_jobs)
-
+        elif resp.status_code == 429:
+            print("  ⚠ Rate limit — using demo data.")
         else:
-            print(f"  ⚠ JSearch returned {response.status_code} — using demo data.")
-            return get_demo_jobs(job_title, location, num_jobs)
+            print(f"  ⚠ Status {resp.status_code} — using demo data.")
 
     except requests.Timeout:
-        print("  ⚠ JSearch request timed out — using demo data.")
-        return get_demo_jobs(job_title, location, num_jobs)
-
+        print("  ⚠ Timeout — using demo data.")
     except Exception as e:
-        print(f"  ⚠ JSearch error: {e} — using demo data.")
-        return get_demo_jobs(job_title, location, num_jobs)
+        print(f"  ⚠ Error: {e} — using demo data.")
+
+    return get_demo_jobs(job_title, location, num_jobs, job_type)
 
 
 # ─────────────────────────────────────────
@@ -114,125 +124,65 @@ def fetch_jobs_jsearch(job_title: str, location: str, num_jobs: int = 10) -> lis
 # ─────────────────────────────────────────
 
 def _format_location(job: dict) -> str:
-    city    = job.get("job_city", "")
-    state   = job.get("job_state", "")
-    country = job.get("job_country", "")
-    parts   = [p for p in [city, state, country] if p]
+    parts = [p for p in [job.get("job_city",""), job.get("job_state",""), job.get("job_country","")] if p]
     return ", ".join(parts) if parts else "India"
 
-
 def _format_salary(job: dict) -> str:
-    min_s  = job.get("job_min_salary")
-    max_s  = job.get("job_max_salary")
-    period = job.get("job_salary_period", "")
-
-    if min_s and max_s:
-        return f"₹{int(min_s):,} – ₹{int(max_s):,} / {period or 'year'}"
-    elif min_s:
-        return f"₹{int(min_s):,}+ / {period or 'year'}"
+    mn, mx = job.get("job_min_salary"), job.get("job_max_salary")
+    p = job.get("job_salary_period", "year")
+    if mn and mx: return f"₹{int(mn):,} – ₹{int(mx):,} / {p}"
+    if mn:        return f"₹{int(mn):,}+ / {p}"
     return "Not disclosed"
 
-
 def _extract_highlights(job: dict) -> list:
-    """Pulls out key requirement bullets from JSearch highlights."""
-    highlights = job.get("job_highlights", {})
-    quals      = highlights.get("Qualifications", [])
-    resps      = highlights.get("Responsibilities", [])
-    return (quals + resps)[:5]
+    h = job.get("job_highlights", {})
+    return (h.get("Qualifications", []) + h.get("Responsibilities", []))[:5]
+
+def _source_icon(source: str) -> str:
+    s = source.lower()
+    if "linkedin"    in s: return "🔵 LinkedIn"
+    if "naukri"      in s: return "🟠 Naukri"
+    if "internshala" in s: return "🟢 Internshala"
+    if "indeed"      in s: return "🔴 Indeed"
+    if "glassdoor"   in s: return "🟡 Glassdoor"
+    return f"⚪ {source}"
+
 
 
 # ─────────────────────────────────────────
 # DEMO FALLBACK
 # ─────────────────────────────────────────
 
-def get_demo_jobs(job_title: str, location: str, num_jobs: int = 10) -> list:
-    """Returns demo jobs when API is unavailable."""
+def get_demo_jobs(job_title: str, location: str, num_jobs: int = 10, job_type: str = "job") -> list:
+    is_intern = job_type == "internship"
+    prefix    = "Internship" if is_intern else "Developer"
+    salary    = "₹8,000 – ₹15,000 / month (Stipend)" if is_intern else "₹18,00,000 – ₹28,00,000 / year"
+
     templates = [
-        {
-            "title":       f"Senior {job_title}",
-            "company":     "TechCorp India",
-            "salary":      "₹18,00,000 – ₹28,00,000 / year",
-            "url":         "https://www.linkedin.com/jobs/",
-            "source":      "Demo",
-            "job_type":    "Full-time",
-            "is_remote":   False,
-            "description": f"We are looking for a Senior {job_title} with 4+ years experience. Must have strong Python, SQL, and cloud skills. Work with cross-functional teams to build scalable systems.",
-            "highlights":  ["4+ years experience", "Strong Python skills", "Cloud platform experience"]
-        },
-        {
-            "title":       f"{job_title} — Remote",
-            "company":     "GlobalSoft",
-            "salary":      "₹22,00,000 – ₹35,00,000 / year",
-            "url":         "https://www.naukri.com/",
-            "source":      "Demo",
-            "job_type":    "Full-time",
-            "is_remote":   True,
-            "description": f"Remote {job_title} role. Competitive pay, flexible hours. 3+ years required. Strong communication and problem-solving skills needed.",
-            "highlights":  ["Remote work", "3+ years experience", "Flexible hours"]
-        },
-        {
-            "title":       f"Junior {job_title}",
-            "company":     "StartupXYZ",
-            "salary":      "₹6,00,000 – ₹10,00,000 / year",
-            "url":         "https://www.indeed.co.in/",
-            "source":      "Demo",
-            "job_type":    "Full-time",
-            "is_remote":   False,
-            "description": f"Junior {job_title} opportunity at a fast-growing startup. 0-2 years experience. Great learning environment with mentorship.",
-            "highlights":  ["0-2 years experience", "Mentorship provided", "Fast-growing startup"]
-        },
-        {
-            "title":       f"{job_title} Lead",
-            "company":     "Enterprise Solutions Ltd",
-            "salary":      "₹35,00,000 – ₹50,00,000 / year",
-            "url":         "https://www.glassdoor.co.in/",
-            "source":      "Demo",
-            "job_type":    "Full-time",
-            "is_remote":   False,
-            "description": f"Lead {job_title} to manage a team of 5-8 engineers. 7+ years experience required. Architecture design and stakeholder management skills essential.",
-            "highlights":  ["7+ years experience", "Team leadership", "Architecture design"]
-        },
-        {
-            "title":       f"{job_title} Consultant",
-            "company":     "Deloitte India",
-            "salary":      "₹25,00,000 – ₹40,00,000 / year",
-            "url":         "https://apply.deloitte.com/",
-            "source":      "Demo",
-            "job_type":    "Full-time",
-            "is_remote":   False,
-            "description": f"Consultant role for {job_title} at Deloitte. Client-facing role, 5+ years experience. Strong communication and analytical skills.",
-            "highlights":  ["Client-facing role", "5+ years experience", "Consulting mindset"]
-        },
+        {"title": f"{job_title} {prefix} — Remote",   "company": "TechCorp India",           "salary": salary, "url": "https://www.linkedin.com/jobs/",  "source": "Demo", "job_type": "INTERN" if is_intern else "Full-time", "is_remote": True},
+        {"title": f"Junior {job_title}",               "company": "StartupXYZ",               "salary": salary, "url": "https://www.naukri.com/",          "source": "Demo", "job_type": "INTERN" if is_intern else "Full-time", "is_remote": False},
+        {"title": f"{job_title} {prefix} — On-site",  "company": "GlobalSoft",               "salary": salary, "url": "https://www.indeed.co.in/",        "source": "Demo", "job_type": "INTERN" if is_intern else "Full-time", "is_remote": False},
+        {"title": f"Senior {job_title}",               "company": "Enterprise Solutions Ltd", "salary": salary, "url": "https://www.glassdoor.co.in/",     "source": "Demo", "job_type": "Full-time",                             "is_remote": False},
+        {"title": f"{job_title} Consultant",           "company": "Deloitte India",           "salary": salary, "url": "https://apply.deloitte.com/",      "source": "Demo", "job_type": "Full-time",                             "is_remote": False},
     ]
 
-    results = []
-    for i, t in enumerate(templates[:num_jobs]):
-        results.append({
-            **t,
-            "location":  location,
-            "posted_at": "2025-01-01",
-        })
-    return results
+    return [
+        {**t, "location": location, "posted_at": "2026-04-01",
+         "description": f"{'Internship' if is_intern else 'Full-time'} {job_title} role at {t['company']}. Strong fundamentals required.", "highlights": []}
+        for t in templates[:num_jobs]
+    ]
 
 
 # ─────────────────────────────────────────
 # MAIN ENTRY
 # ─────────────────────────────────────────
 
-def scrape_jobs(job_title: str, location: str = "India", num_jobs: int = 10) -> list:
-    """
-    Main entry point for job search.
-    Uses JSearch API if RAPIDAPI_KEY is set, else demo data.
-    """
-    print(f"\n  Job search: '{job_title}' in '{location}' ({num_jobs} jobs)")
-    return fetch_jobs_jsearch(job_title, location, num_jobs)
-
-
-if __name__ == "__main__":
-    jobs = scrape_jobs("Python Developer", "Bangalore", 5)
-    for j in jobs:
-        print(f"\n{j['title']} @ {j['company']}")
-        print(f"  Location : {j['location']}")
-        print(f"  Salary   : {j['salary']}")
-        print(f"  Apply    : {j['url']}")
-        print(f"  Remote   : {j['is_remote']}")
+def scrape_jobs(
+    job_title: str,
+    location: str = "India",
+    num_jobs: int = 10,
+    job_type: str = "job",
+    experience: str = "fresher"
+) -> list:
+    print(f"\n  Job search: '{job_title}' | {location} | type={job_type} | exp={experience}")
+    return fetch_jobs_jsearch(job_title, location, num_jobs, job_type, experience)

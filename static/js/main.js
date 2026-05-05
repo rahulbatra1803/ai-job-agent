@@ -336,6 +336,9 @@ function jobCardHtml(job, idx) {
   const applyUrl  = job.url && job.url !== 'https://example.com/job1'
     ? `<a class="apply-btn" href="${job.url}" target="_blank" rel="noopener">Apply Now →</a>`
     : `<span style="font-size:0.8rem;color:var(--muted)">No direct link available</span>`;
+  const srcBadge = job.source_icon
+    ? `<span class="source-badge">${job.source_icon}</span>`
+    : '';
 
   return `
     <div class="job-card" onclick="toggleJobCard(this)">
@@ -350,6 +353,7 @@ function jobCardHtml(job, idx) {
         <span>📍 ${job.location}</span>
         <span>💰 ${job.salary || 'Not specified'}</span>
         <span>🎯 ${job.fit_level || ''}</span>
+        ${srcBadge}
       </div>
       <div class="job-detail">
         <div class="detail-grid">
@@ -702,4 +706,11 @@ document.addEventListener('click', (e) => {
 /* ── SCROLL TO TOP (Back to Search) ── */
 window.scrollToTop = () => {
   window.scrollTo({ top: 0, behavior: 'smooth' });
+};
+
+/* ── TOGGLE HELPER ── */
+window.setToggle = (groupId, btn, hiddenId) => {
+  document.querySelectorAll(`#${groupId} .toggle-btn`).forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById(hiddenId).value = btn.dataset.value;
 };

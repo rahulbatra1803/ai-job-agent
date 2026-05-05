@@ -40,10 +40,12 @@ def analyze():
     """
     try:
         # Form data
-        job_title = request.form.get('job_title', '').strip()
-        location  = request.form.get('location', '').strip()
-        num_jobs  = int(request.form.get('num_jobs', 10))
-        tone      = request.form.get('tone', 'professional')
+        job_title  = request.form.get('job_title', '').strip()
+        location   = request.form.get('location', '').strip()
+        num_jobs   = int(request.form.get('num_jobs', 10))
+        tone       = request.form.get('tone', 'professional')
+        job_type   = request.form.get('job_type', 'job')        # 'job' or 'internship'
+        experience = request.form.get('experience', 'fresher')  # fresher|1yr|2-3yr|4+yr
 
         if not job_title:
             return jsonify({'error': 'Job title is required.'}), 400
@@ -68,7 +70,7 @@ def analyze():
         # Background thread mein pipeline run karo
         t = threading.Thread(
             target=_run_pipeline_thread,
-            args=(session_id, tmp.name, job_title, location, num_jobs, tone),
+            args=(session_id, tmp.name, job_title, location, num_jobs, tone, job_type, experience),
             daemon=True
         )
         t.start()
@@ -153,7 +155,7 @@ Return ONLY the JSON array, nothing else."""
 # PIPELINE THREAD
 # ─────────────────────────────────────────────
 
-def _run_pipeline_thread(session_id, resume_path, job_title, location, num_jobs, tone):
+def _run_pipeline_thread(session_id, resume_path, job_title, location, num_jobs, tone, job_type='job', experience='fresher'):
     """Background thread — pipeline steps run karta hai aur progress queue mein dalta hai."""
     q = progress_queues.get(session_id)
     if not q:
@@ -175,7 +177,7 @@ def _run_pipeline_thread(session_id, resume_path, job_title, location, num_jobs,
 
         # Step 2 — Jobs
         push('progress', step=2, message=f'Searching jobs: {job_title} in {location}...')
-        jobs = scrape_jobs(job_title, location, num_jobs)
+        jobs = scrape_jobs(job_title, location, num_jobs, job_type, experience)
         push('progress', step=2, message=f'{len(jobs)} jobs found.')
 
         # Step 3 — Match

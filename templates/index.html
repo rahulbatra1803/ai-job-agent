@@ -28,7 +28,7 @@
             <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </div>
-        <span class="ai-logo-text">Spin-it✌️</span>
+        <span class="ai-logo-text">Groq AI</span>
       </div>
     </nav>
   </header>
@@ -92,7 +92,29 @@
           </div>
         </div>
 
-        <!-- Num Jobs only (tone removed) -->
+        <!-- Job Type + Experience -->
+        <div class="fields-row">
+          <div class="field-group">
+            <label class="field-label">What are you looking for?</label>
+            <div class="toggle-group" id="jobTypeToggle">
+              <button type="button" class="toggle-btn active" data-value="job" onclick="setToggle('jobTypeToggle', this, 'job_type_val')">💼 Jobs</button>
+              <button type="button" class="toggle-btn" data-value="internship" onclick="setToggle('jobTypeToggle', this, 'job_type_val')">🎓 Internships</button>
+            </div>
+            <input type="hidden" name="job_type" id="job_type_val" value="job" />
+          </div>
+          <div class="field-group">
+            <label class="field-label">Experience Level</label>
+            <div class="toggle-group" id="expToggle">
+              <button type="button" class="toggle-btn active" data-value="fresher" onclick="setToggle('expToggle', this, 'experience_val')">Student / 0yr</button>
+              <button type="button" class="toggle-btn" data-value="1yr" onclick="setToggle('expToggle', this, 'experience_val')">1 yr</button>
+              <button type="button" class="toggle-btn" data-value="2-3yr" onclick="setToggle('expToggle', this, 'experience_val')">2–3 yr</button>
+              <button type="button" class="toggle-btn" data-value="4+yr" onclick="setToggle('expToggle', this, 'experience_val')">4+ yr</button>
+            </div>
+            <input type="hidden" name="experience" id="experience_val" value="fresher" />
+          </div>
+        </div>
+
+        <!-- Num Jobs -->
         <div class="field-group">
           <label class="field-label">Jobs to Search <span class="field-value" id="numJobsDisplay">10</span></label>
           <input type="range" id="numJobs" name="num_jobs" min="5" max="20" value="10" class="range-input" />
@@ -182,8 +204,8 @@
   </main>
 
   <footer class="site-footer">
-  <span>Built with Flask · Groq LLaMA 3 · RapidAPI · scikit-learn</span>
-</footer>
+    <span>Built with Flask · LangChain · Groq LLaMA 3</span>
+  </footer>
 
 
   <!-- ── TOP 5 APPLY MODAL ── -->
