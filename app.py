@@ -41,7 +41,7 @@ def analyze():
         job_title  = request.form.get('job_title', '').strip()
         location   = request.form.get('location', '').strip()
         tone       = request.form.get('tone', 'professional')
-        job_type   = request.form.get('job_type', 'job')
+        job_type = 'job'
         experience = request.form.get('experience', 'fresher')
 
         if not job_title:

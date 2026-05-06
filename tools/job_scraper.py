@@ -41,14 +41,8 @@ def _priority(job: dict) -> int:
     return len(PRIORITY_PLATFORMS)
 
 
-def _build_query(job_title: str, location: str, job_type: str, experience: str) -> str:
-    """Build a smart JSearch query string — kept short for better India results."""
-    if job_type == "internship":
-        # For internships, experience modifier not needed — internship keyword is enough
-        return f"{job_title} internship in {location}"
-    else:
-        exp = EXPERIENCE_QUERY.get(experience, "")
-        return f"{job_title} {exp} in {location}".strip()
+def _build_query(job_title, location, job_type, experience):
+    return f"{job_title} in {location}"
 
 
 def _parse_jobs(raw_jobs: list, num_jobs: int) -> list:
@@ -287,6 +281,19 @@ def get_demo_jobs(job_title: str, location: str, num_jobs: int = 10, job_type: s
 # MAIN ENTRY
 # ─────────────────────────────────────────
 
+ADZUNA_APP_ID  = os.getenv("ADZUNA_APP_ID")
+ADZUNA_APP_KEY = os.getenv("ADZUNA_APP_KEY")
+ADZUNA_URL     = "https://api.adzuna.com/v1/api/jobs/in/search/1"
+
+
+def _fmt_adzuna_salary(job: dict) -> str:
+    mn = job.get("salary_min")
+    mx = job.get("salary_max")
+    if mn and mx: return f"₹{int(mn):,} – ₹{int(mx):,} / year"
+    if mn:        return f"₹{int(mn):,}+ / year"
+    return "Not disclosed"
+
+
 def scrape_jobs(
     job_title:  str,
     location:   str = "India",
@@ -295,7 +302,61 @@ def scrape_jobs(
     experience: str = "fresher"
 ) -> list:
     print(f"\n  Job search: '{job_title}' | {location} | type={job_type} | exp={experience}")
-    return fetch_jobs_jsearch(job_title, location, num_jobs, job_type, experience)
+
+    # ── JSearch ──
+    jsearch_jobs = fetch_jobs_jsearch(job_title, location, num_jobs, job_type, experience)
+
+    # ── Adzuna ──
+    adzuna_jobs = []
+    if ADZUNA_APP_ID and ADZUNA_APP_KEY:
+        try:
+            print(f"  Adzuna: '{job_title}' in '{location}'")
+            params = {
+                "app_id":           ADZUNA_APP_ID,
+                "app_key":          ADZUNA_APP_KEY,
+                "results_per_page": num_jobs,
+                "what":             job_title,
+                "where":            location,
+                "sort_by":          "date",
+                "content-type":     "application/json",
+            }
+            resp = requests.get(ADZUNA_URL, params=params, timeout=15)
+            if resp.status_code == 200:
+                results = resp.json().get("results", [])
+                print(f"    → {len(results)} jobs from Adzuna")
+                for j in results:
+                    adzuna_jobs.append({
+                        "title":       j.get("title", "N/A"),
+                        "company":     j.get("company", {}).get("display_name", "N/A"),
+                        "location":    j.get("location", {}).get("display_name", "India"),
+                        "salary":      _fmt_adzuna_salary(j),
+                        "url":         j.get("redirect_url", ""),
+                        "source":      "Adzuna",
+                        "source_icon": "🟤 Adzuna",
+                        "posted_at":   j.get("created", "")[:10],
+                        "job_type":    "Full-time",
+                        "is_remote":   False,
+                        "description": j.get("description", "")[:1500],
+                        "highlights":  [],
+                    })
+            else:
+                print(f"    → Adzuna HTTP {resp.status_code}")
+        except Exception as e:
+            print(f"    → Adzuna error: {e}")
+    else:
+        print("  Adzuna: Keys not set — skipping.")
+
+    # ── Merge + Dedup ──
+    seen   = set()
+    merged = []
+    for job in jsearch_jobs + adzuna_jobs:
+        key = f"{job['title'].lower()}_{job['company'].lower()}"
+        if key not in seen:
+            seen.add(key)
+            merged.append(job)
+
+    print(f"  ✓ Total merged: {len(merged)} jobs")
+    return merged[:num_jobs]
 
 
 if __name__ == "__main__":
