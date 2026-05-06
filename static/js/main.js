@@ -15,8 +15,6 @@ const uploadInner   = document.getElementById('uploadInner');
 const uploadSelected= document.getElementById('uploadSelected');
 const fileNameEl    = document.getElementById('fileName');
 const removeFileBtn = document.getElementById('removeFile');
-const numJobsInput  = document.getElementById('numJobs');
-const numJobsDisplay= document.getElementById('numJobsDisplay');
 
 // ── State ──
 let currentResults = null;
@@ -56,10 +54,6 @@ function setFile(f) {
   uploadSelected.style.display = 'flex';
 }
 
-// ── Range slider ──
-numJobsInput.addEventListener('input', () => {
-  numJobsDisplay.textContent = numJobsInput.value;
-});
 
 // ─────────────────────────────────────────
 // FORM SUBMIT
@@ -448,7 +442,6 @@ resetBtn.addEventListener('click', () => {
   form.reset();
   uploadInner.style.display   = 'flex';
   uploadSelected.style.display= 'none';
-  numJobsDisplay.textContent  = '10';
 
   // Reset progress steps
   for (let i = 1; i <= 4; i++) {
