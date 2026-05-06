@@ -440,6 +440,8 @@ resetBtn.addEventListener('click', () => {
   progressPanel.style.display = 'none';
   formPanel.style.display     = 'block';
   form.reset();
+  const oldBubble = document.getElementById('agentBubble');
+  if (oldBubble) oldBubble.remove();
   uploadInner.style.display   = 'flex';
   uploadSelected.style.display= 'none';
 
