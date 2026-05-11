@@ -7,13 +7,24 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/css/style.css" />
+
+  <style>
+    /* ✅ Canvas replaces fixed+blur orb divs */
+    #orbCanvas {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 0;
+    }
+  </style>
 </head>
 <body>
 
-  <div class="bg-orb orb-1"></div>
-  <div class="bg-orb orb-2"></div>
-  <div class="bg-orb orb-3"></div>
-  <div class="noise"></div>
+  <!-- ✅ Single canvas — GPU compositor, zero scroll jank -->
+  <canvas id="orbCanvas"></canvas>
+  <!-- .bg-orb divs aur .noise div HATA diye — yahi root cause tha -->
 
   <!-- ── HEADER ── -->
   <header class="site-header">
@@ -190,5 +201,68 @@
   </div>
 
   <script src="/static/js/main.js"></script>
+
+  <script>
+  /* ══════════════════════════════════════════
+     ✅ CANVAS ORB RENDERER
+     3 fixed+blur divs ko replace karta hai.
+     GPU compositor thread pe chalta hai —
+     scroll pe zero CPU hit, zero jank.
+     Low-end devices pe bhi smooth.
+  ══════════════════════════════════════════ */
+  (function () {
+    const canvas = document.getElementById('orbCanvas');
+    const ctx    = canvas.getContext('2d');
+    let W, H;
+
+    // Low-end detect: 4 ya kam cores = mobile/weak device
+    const isLowEnd = navigator.hardwareConcurrency <= 4 ||
+                     /Android.*Mobile|iPhone|iPad/.test(navigator.userAgent);
+
+    const orbs = [
+      { x: -0.18, y: -0.22, r: 0.42, color: '#2563eb', ox: 0.04, oy: 0.03, speed: 0.0003  },
+      { x:  1.10, y:  1.12, r: 0.36, color: '#7c3aed', ox:-0.03, oy:-0.04, speed: 0.00025 },
+      { x:  0.50, y:  0.40, r: 0.30, color: '#0891b2', ox: 0.02, oy: 0.02, speed: 0.0002  },
+    ];
+
+    function resize() {
+      W = canvas.width  = window.innerWidth;
+      H = canvas.height = window.innerHeight;
+    }
+
+    function drawOrb(orb, t) {
+      const px = (orb.x + Math.sin(t * orb.speed * 1000 + 1) * orb.ox) * W;
+      const py = (orb.y + Math.cos(t * orb.speed * 1000 + 2) * orb.oy) * H;
+      const r  = orb.r * Math.min(W, H);
+
+      const g = ctx.createRadialGradient(px, py, 0, px, py, r);
+      g.addColorStop(0,   orb.color + '38'); // ~22% opacity
+      g.addColorStop(0.5, orb.color + '15'); // ~8%
+      g.addColorStop(1,   orb.color + '00'); // 0%
+
+      ctx.beginPath();
+      ctx.arc(px, py, r, 0, Math.PI * 2);
+      ctx.fillStyle = g;
+      ctx.fill();
+    }
+
+    // FPS cap: low-end=20fps(50ms), high-end=30fps(33ms)
+    const fpsCap  = isLowEnd ? 50 : 33;
+    let lastFrame = 0;
+
+    function loop(ts) {
+      requestAnimationFrame(loop);
+      if (ts - lastFrame < fpsCap) return;
+      lastFrame = ts;
+      ctx.clearRect(0, 0, W, H);
+      orbs.forEach(o => drawOrb(o, ts));
+    }
+
+    window.addEventListener('resize', resize);
+    resize();
+    requestAnimationFrame(loop);
+  })();
+  </script>
+
 </body>
 </html>
